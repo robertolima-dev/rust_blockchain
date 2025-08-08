@@ -1,6 +1,7 @@
 use actix_web::{HttpResponse, Responder, get};
 
-#[get("/api/v1/health/")]
+/// Health check (trailing slash)
+#[get("/health/")]
 pub async fn health_check() -> impl Responder {
     HttpResponse::Ok().body("API is up and running 🦀")
 }
