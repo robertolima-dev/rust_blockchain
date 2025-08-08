@@ -156,6 +156,16 @@ curl http://127.0.0.1:8080/api/v1/validate/
 
 ---
 
+## 🧠 Autor
+**Roberto Lima**  
+- 📧 **Email**: robertolima.izphera@gmail.com
+- 🔗 [GitHub Roberto Lima](https://github.com/robertolima-dev)  
+- 💼 [Linkedin Roberto Lima](https://www.linkedin.com/in/robertolima-dev/)
+- 🌐 [Website Roberto Lima](https://robertolima-developer.vercel.app/)
+- 👤 [Gravatar Roberto Lima](https://gravatar.com/deliciouslyautomaticf57dc92af0)
+
+---
+
 ## 📜 License
 
 MIT License
