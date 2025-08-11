@@ -1,4 +1,5 @@
 use super::Block;
+use crate::transaction::Transaction;
 
 /// Simple in-memory blockchain with Proof-of-Work.
 #[derive(Debug)]
@@ -25,12 +26,12 @@ impl Blockchain {
             .expect("Blockchain should always have at least the genesis block")
     }
 
-    /// Mine and append a new block with the provided `data`.
-    pub fn mine_block(&mut self, data: String) -> &Block {
+    /// Mine and append a new block with the provided transactions.
+    pub fn mine_block(&mut self, transactions: Vec<Transaction>) -> &Block {
         let index = self.chain.len() as u64;
         let prev_hash = self.last_block().hash.clone();
 
-        let mut block = Block::new(index, prev_hash, data);
+        let mut block = Block::new(index, prev_hash, transactions);
         block.mine(self.difficulty);
 
         self.chain.push(block);

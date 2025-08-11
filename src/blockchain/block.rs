@@ -2,8 +2,9 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// A single block in the blockchain.
-/// For now we keep a simple `data` payload; we'll evolve to real transactions later.
+use crate::transaction::Transaction;
+
+/// A single block in the blockchain holding a list of transactions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
     pub index: u64,
@@ -11,7 +12,7 @@ pub struct Block {
     pub previous_hash: String,
     pub nonce: u64,   // Proof-of-Work nonce
     pub hash: String, // Cached hash of the block
-    pub data: String, // Placeholder for transactions/payload
+    pub transactions: Vec<Transaction>,
 }
 
 impl Block {
@@ -23,32 +24,34 @@ impl Block {
             previous_hash: String::from("0"),
             nonce: 0,
             hash: String::new(),
-            data: String::from("genesis"),
+            transactions: Vec::new(), // we can later include a coinbase if we want
         };
         block.hash = block.compute_hash();
         block
     }
 
     /// Create a new block (not mined yet). Call `mine()` to perform PoW.
-    pub fn new(index: u64, previous_hash: String, data: String) -> Self {
+    pub fn new(index: u64, previous_hash: String, transactions: Vec<Transaction>) -> Self {
         let mut block = Self {
             index,
             timestamp: Utc::now().timestamp(),
             previous_hash,
             nonce: 0,
             hash: String::new(),
-            data,
+            transactions,
         };
         block.hash = block.compute_hash();
         block
     }
 
     /// Compute the SHA-256 hash of this block using its fields
-    /// (excluding the `hash` field itself).
+    /// (excluding the `hash` field itself). Transactions are serialized
+    /// deterministically as JSON and included in the preimage.
     pub fn compute_hash(&self) -> String {
+        let txs_json = serde_json::to_string(&self.transactions).expect("serialize txs");
         let preimage = format!(
             "{}:{}:{}:{}:{}",
-            self.index, self.timestamp, self.previous_hash, self.nonce, self.data
+            self.index, self.timestamp, self.previous_hash, self.nonce, txs_json
         );
         let mut hasher = Sha256::new();
         hasher.update(preimage.as_bytes());
@@ -86,6 +89,7 @@ impl Block {
 #[cfg(test)]
 mod tests {
     use super::Block;
+    use crate::transaction::{OutPoint, Transaction, TxInput, TxOutput};
 
     #[test]
     fn genesis_has_valid_hash() {
@@ -96,7 +100,19 @@ mod tests {
 
     #[test]
     fn mining_produces_leading_zeros() {
-        let mut b = Block::new(1, "prev".into(), "hello".into());
+        let tx = Transaction::new(
+            vec![TxInput {
+                outpoint: OutPoint {
+                    txid: "demo-txid".into(),
+                    vout: 0,
+                },
+            }],
+            vec![TxOutput {
+                address: "addr".into(),
+                amount: 1,
+            }],
+        );
+        let mut b = Block::new(1, "prev".into(), vec![tx]);
         b.mine(2);
         assert!(b.hash.starts_with("00"));
         assert!(b.is_valid(2));
@@ -104,10 +120,37 @@ mod tests {
 
     #[test]
     fn invalid_when_mutated() {
-        let mut b = Block::new(2, "prev".into(), "payload".into());
+        let tx = Transaction::new(
+            vec![TxInput {
+                outpoint: OutPoint {
+                    txid: "demo-txid".into(),
+                    vout: 0,
+                },
+            }],
+            vec![TxOutput {
+                address: "addr".into(),
+                amount: 1,
+            }],
+        );
+        let mut b = Block::new(2, "prev".into(), vec![tx]);
         b.mine(2);
         let old_hash = b.hash.clone();
-        b.data = "tampered".into();
+
+        // Mutate: add a new tx (tampering)
+        let extra = Transaction::new(
+            vec![TxInput {
+                outpoint: OutPoint {
+                    txid: "x".into(),
+                    vout: 0,
+                },
+            }],
+            vec![TxOutput {
+                address: "y".into(),
+                amount: 1,
+            }],
+        );
+        b.transactions.push(extra);
+
         assert_ne!(old_hash, b.compute_hash());
         assert!(!b.is_valid(2));
     }

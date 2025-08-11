@@ -2,10 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
 use crate::blockchain::Blockchain;
+use crate::transaction::{Transaction, UtxoSet};
 
-/// Shared application state with an in-memory blockchain.
+/// Shared application state with an in-memory blockchain, mempool and UTXO set.
 pub struct AppState {
     pub blockchain: Mutex<Blockchain>,
+    pub mempool: Mutex<Vec<Transaction>>,
+    pub utxo_set: Mutex<UtxoSet>,
 }
 
 impl Default for AppState {
@@ -13,11 +16,13 @@ impl Default for AppState {
         use crate::blockchain::DEFAULT_DIFFICULTY;
         Self {
             blockchain: Mutex::new(Blockchain::new(DEFAULT_DIFFICULTY)),
+            mempool: Mutex::new(Vec::new()),
+            utxo_set: Mutex::new(UtxoSet::new()),
         }
     }
 }
 
-/* ---------- Response/Request Models ---------- */
+/* ---------- Chain API Models ---------- */
 
 #[derive(Serialize)]
 pub struct ChainResponse<'a> {
@@ -54,4 +59,37 @@ pub struct DifficultyResponse {
 #[derive(Deserialize)]
 pub struct SetDifficultyRequest {
     pub difficulty: u32,
+}
+
+/* ---------- TX API Models ---------- */
+
+#[derive(Deserialize)]
+pub struct NewTxRequest {
+    pub inputs: Vec<crate::transaction::TxInput>,
+    pub outputs: Vec<crate::transaction::TxOutput>,
+}
+
+#[derive(Serialize)]
+pub struct NewTxResponse {
+    pub txid: String,
+}
+
+#[derive(Serialize)]
+pub struct MempoolResponse {
+    pub size: usize,
+    pub transactions: Vec<String>, // list txids for brevity
+}
+
+/* ---------- Faucet API Models (dev) ---------- */
+
+#[derive(Deserialize)]
+pub struct FaucetRequest {
+    pub address: String,
+    pub amount: u64,
+}
+
+#[derive(Serialize)]
+pub struct FaucetResponse {
+    pub txid: String,
+    pub outpoints: Vec<crate::transaction::OutPoint>,
 }

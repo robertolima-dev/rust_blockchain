@@ -1,171 +1,216 @@
-# 🦀 Rust Blockchain API
+# Rust Blockchain API 🚀
 
-A simple blockchain implementation in Rust with an HTTP API built using **Actix Web**.  
-This project is structured in a modular way and supports basic Proof-of-Work mining, chain validation, difficulty adjustment, and is ready to be extended with transactions, wallets, and P2P networking.
+Uma blockchain simplificada escrita em **Rust**, servida por uma **API REST com Actix Web**.  
+Atualmente com suporte a:
 
----
-
-## 📌 Features Implemented
-- Modular architecture with context-based folders (`api`, `blockchain`, etc.)
-- In-memory blockchain with:
-  - Genesis block
-  - SHA-256 hashing
-  - Proof-of-Work mining
-  - Chain validation
-  - Adjustable difficulty
-- REST API with Actix Web (`/api/v1/` prefix)
-- Hot reload support with `cargo-watch`
-- Configurable host/port via `.env`
-- JSON responses for all API endpoints
+- Faucet para criar UTXOs de teste
+- Transações com validação real de entradas (modelo UTXO)
+- Mempool para transações pendentes
+- Logging detalhado para debug
+- Estrutura de pastas organizada (`mod.rs` em cada módulo)
+- Endpoints padronizados em `/api/v1/.../` (com barra final)
 
 ---
 
-## 📂 Project Structure
-```text
+## 📂 Estrutura de Pastas
+
+```
+
 src/
-├── api/                 # HTTP API routes (controllers)
-│   ├── mod.rs
-│   ├── health.rs
-│   └── chain.rs
-├── blockchain/          # Blockchain core logic
-│   ├── mod.rs
-│   └── block.rs
-├── main.rs              # API entrypoint
-└── lib.rs               # Module declarations
+├── api/
+│   ├── chain.rs        # Endpoints relacionados à blockchain (get, validate, mine, difficulty)
+│   ├── health.rs       # Health check
+│   ├── mod.rs          # Registro das rotas
+│   ├── models.rs       # Modelos de request/response + AppState
+│   └── tx.rs           # Faucet, transações e mempool
+├── blockchain/
+│   ├── block.rs        # Estrutura de bloco + PoW
+│   ├── mod.rs          # Módulo principal da blockchain
+│   └── ...
+├── transaction/
+│   ├── model.rs        # Transaction, TxInput, TxOutput
+│   ├── utxo.rs         # UTXO set + OutPoint
+│   └── mod.rs          # Reexporta submódulos
+└── main.rs             # Inicializa servidor e AppState
+
 ````
 
 ---
 
-## ⚙️ Requirements
+## ⚙️ Requisitos
 
-* [Rust](https://www.rust-lang.org/tools/install) (latest stable)
-* [cargo-watch](https://crates.io/crates/cargo-watch) for hot reload (optional)
-
-Install `cargo-watch`:
-
-```bash
-cargo install cargo-watch
-```
+- Rust >= 1.70
+- `cargo` instalado
 
 ---
 
-## 🚀 Running the Project
-
-### 1. Clone and enter the project folder
+## ▶️ Rodando o Servidor
 
 ```bash
+# Clone e entre no diretório do projeto
 git clone <repo-url>
-cd rust_blockchain_api
-```
+cd <repo>
 
-### 2. Install dependencies (done automatically by Cargo)
-
-```bash
-cargo build
-```
-
-### 3. Configure environment variables
-
-Create a `.env` file:
-
-```env
-HOST=127.0.0.1
-PORT=8080
-RUST_LOG=info
-```
-
-### 4. Run the API
-
-Normal mode:
-
-```bash
+# Instale dependências e rode
 cargo run
-```
+````
 
-Hot reload mode:
-
-```bash
-cargo watch -q -c -w src -w Cargo.toml -w .env -x 'run'
-```
-
-Script mode:
-
-```bash
+# Ou
 ./start_server.sh
+````
+
+Com logs de debug:
+
+```bash
+RUST_LOG=debug,actix_web=info cargo run
+```
+
+Servidor sobe por padrão em:
+
+```
+http://127.0.0.1:8080
 ```
 
 ---
 
-## 🌐 API Endpoints
+## 🌐 Endpoints Disponíveis
 
-All endpoints are prefixed with `/api/v1/` and **must end with a trailing slash `/`**.
+### **1. Health Check**
 
-| Method | Endpoint              | Description                | Body Example          |
-| ------ | --------------------- | -------------------------- | --------------------- |
-| GET    | `/api/v1/health/`     | Health check               | —                     |
-| GET    | `/api/v1/chain/`      | Get the entire blockchain  | —                     |
-| GET    | `/api/v1/validate/`   | Validate the blockchain    | —                     |
-| POST   | `/api/v1/mine/`       | Mine a new block with data | `{ "data": "hello" }` |
-| GET    | `/api/v1/difficulty/` | Get current PoW difficulty | —                     |
-| POST   | `/api/v1/difficulty/` | Set PoW difficulty         | `{ "difficulty": 3 }` |
-
----
-
-## 📌 Example Requests
-
-### Health Check
+`GET /api/v1/health/`
+Verifica se a API está online.
 
 ```bash
 curl http://127.0.0.1:8080/api/v1/health/
 ```
 
-### Mine a New Block
+---
+
+### **2. Faucet** (DEV)
+
+Cria um UTXO diretamente para testes.
+
+```
+POST /api/v1/faucet/
+```
+
+**Request:**
+
+```json
+{ "address": "alice", "amount": 100 }
+```
+
+**Response:**
+
+```json
+{
+  "txid": "6c1a0c8b7f2f4b8f9a3e6d1c...",
+  "outpoints": [{ "txid": "6c1a0c8b7f2f4b8f9a3e6d1c...", "vout": 0 }]
+}
+```
+
+---
+
+### **3. Nova Transação**
+
+Cria uma transação usando UTXOs existentes.
+
+```
+POST /api/v1/tx/
+```
+
+**Request:**
+
+```json
+{
+  "inputs": [
+    { "outpoint": { "txid": "6c1a0c8b7f2f4b8f9a3e6d1c...", "vout": 0 } }
+  ],
+  "outputs": [
+    { "address": "bob", "amount": 60 },
+    { "address": "change-alice", "amount": 39 }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{ "txid": "def123..." }
+```
+
+⚠️ Importante:
+
+* Use **txid** e **vout** retornados pelo faucet.
+* `vout` deve ser **número**, não string.
+* Barra final obrigatória: `/api/v1/tx/`
+
+---
+
+### **4. Mempool**
+
+Lista transações pendentes de mineração.
+
+```
+GET /api/v1/mempool/
+```
+
+**Response:**
+
+```json
+{
+  "size": 1,
+  "transactions": [
+    "def123..."
+  ]
+}
+```
+
+---
+
+## 🔍 Fluxo de Teste Completo
+
+1. Criar UTXO com faucet:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/v1/mine/ \
+curl -X POST http://127.0.0.1:8080/api/v1/faucet/ \
   -H "Content-Type: application/json" \
-  -d '{ "data": "my first mined block" }'
+  -d '{ "address": "alice", "amount": 100 }'
 ```
 
-### Validate Blockchain
+2. Criar transação usando UTXO retornado:
 
 ```bash
-curl http://127.0.0.1:8080/api/v1/validate/
+curl -X POST http://127.0.0.1:8080/api/v1/tx/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputs": [
+      { "outpoint": { "txid": "TXID_DO_FAUCET", "vout": 0 } }
+    ],
+    "outputs": [
+      { "address": "bob", "amount": 60 },
+      { "address": "change-alice", "amount": 39 }
+    ]
+  }'
+```
+
+3. Verificar mempool:
+
+```bash
+curl http://127.0.0.1:8080/api/v1/mempool/
 ```
 
 ---
 
-## 🛠 Tech Stack
+## 📌 Próximos Passos
 
-* **Rust**
-* [Actix Web](https://actix.rs/)
-* [Serde](https://serde.rs/) for JSON serialization
-* [SHA2](https://docs.rs/sha2/latest/sha2/) for hashing
-* [Chrono](https://docs.rs/chrono/) for timestamps
-* [dotenvy](https://crates.io/crates/dotenvy) for env config
+* Implementar mineração real (`/mine/`) a partir da mempool.
+* Aplicar blocos minerados ao UTXO set.
+* Ajuste automático de dificuldade.
+* Suporte para mineradores externos (template/submit).
 
 ---
 
-## 📈 Next Steps
-
-* Add **Transaction** module with signed transactions
-* Implement **Wallets** using ECDSA (`secp256k1`)
-* Add **mining rewards** and mempool
-* Implement **P2P networking** for node synchronization
-* Optional: persistent storage
-
----
-
-## 🧠 Autor
-**Roberto Lima**  
-- 📧 **Email**: robertolima.izphera@gmail.com
-- 🔗 [GitHub Roberto Lima](https://github.com/robertolima-dev)  
-- 💼 [Linkedin Roberto Lima](https://www.linkedin.com/in/robertolima-dev/)
-- 🌐 [Website Roberto Lima](https://robertolima-developer.vercel.app/)
-- 👤 [Gravatar Roberto Lima](https://gravatar.com/deliciouslyautomaticf57dc92af0)
-
----
-
-## 📜 License
+## 📜 Licença
 
 MIT License

@@ -4,6 +4,7 @@ use super::models::{
     AppState, ChainResponse, DifficultyResponse, MineRequest, MineResponse, SetDifficultyRequest,
     ValidateResponse,
 };
+use crate::transaction::{Transaction, TxInput, TxOutput};
 
 /// Get the full blockchain.
 #[get("/chain/")]
@@ -29,11 +30,20 @@ pub async fn validate_chain(state: web::Data<AppState>) -> impl Responder {
     HttpResponse::Ok().json(resp)
 }
 
-/// Mine a new block with provided data.
+/// Mine a new block with provided data (temporary: wraps data into a placeholder transaction).
 #[post("/mine/")]
 pub async fn mine_block(state: web::Data<AppState>, req: web::Json<MineRequest>) -> impl Responder {
+    // Placeholder tx: no inputs, zero-amount output (accepted by validator policy)
+    let placeholder_tx = Transaction::new(
+        vec![], // no inputs
+        vec![TxOutput {
+            address: req.data.clone(),
+            amount: 0,
+        }],
+    );
+
     let mut bc = state.blockchain.lock().expect("mutex poisoned");
-    let b = bc.mine_block(req.into_inner().data);
+    let b = bc.mine_block(vec![placeholder_tx]);
     let resp = MineResponse {
         mined_index: b.index,
         hash: b.hash.clone(),
@@ -59,6 +69,7 @@ pub async fn set_difficulty(
     body: web::Json<SetDifficultyRequest>,
 ) -> impl Responder {
     if body.difficulty > 6 {
+        // Keep a soft cap for dev to prevent extremely slow mining.
         return HttpResponse::BadRequest().body("difficulty too high for dev mode (max 6)");
     }
     let mut bc = state.blockchain.lock().expect("mutex poisoned");
