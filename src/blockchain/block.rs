@@ -91,6 +91,17 @@ mod tests {
     use super::Block;
     use crate::transaction::{OutPoint, Transaction, TxInput, TxOutput};
 
+    fn dummy_input(txid: &str, vout: u32) -> TxInput {
+        TxInput {
+            outpoint: OutPoint {
+                txid: txid.into(),
+                vout,
+            },
+            pubkey: String::new(),    // not used in these block tests
+            signature: String::new(), // not used in these block tests
+        }
+    }
+
     #[test]
     fn genesis_has_valid_hash() {
         let b = Block::genesis();
@@ -101,12 +112,7 @@ mod tests {
     #[test]
     fn mining_produces_leading_zeros() {
         let tx = Transaction::new(
-            vec![TxInput {
-                outpoint: OutPoint {
-                    txid: "demo-txid".into(),
-                    vout: 0,
-                },
-            }],
+            vec![dummy_input("demo-txid", 0)],
             vec![TxOutput {
                 address: "addr".into(),
                 amount: 1,
@@ -121,12 +127,7 @@ mod tests {
     #[test]
     fn invalid_when_mutated() {
         let tx = Transaction::new(
-            vec![TxInput {
-                outpoint: OutPoint {
-                    txid: "demo-txid".into(),
-                    vout: 0,
-                },
-            }],
+            vec![dummy_input("demo-txid", 0)],
             vec![TxOutput {
                 address: "addr".into(),
                 amount: 1,
@@ -136,14 +137,9 @@ mod tests {
         b.mine(2);
         let old_hash = b.hash.clone();
 
-        // Mutate: add a new tx (tampering)
+        // Tamper: add a new tx
         let extra = Transaction::new(
-            vec![TxInput {
-                outpoint: OutPoint {
-                    txid: "x".into(),
-                    vout: 0,
-                },
-            }],
+            vec![dummy_input("x", 0)],
             vec![TxOutput {
                 address: "y".into(),
                 amount: 1,

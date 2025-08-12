@@ -1,6 +1,7 @@
 mod api;
 mod blockchain;
 mod transaction;
+mod wallet;
 
 use actix_web::{App, HttpServer, web};
 use dotenvy::dotenv;
