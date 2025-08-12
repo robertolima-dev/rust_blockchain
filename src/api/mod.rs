@@ -1,7 +1,9 @@
+mod balance;
 mod chain;
 mod health;
 pub mod models;
-mod tx;
+mod stats;
+mod tx; // <- add
 
 use actix_web::web::{self, ServiceConfig};
 
@@ -16,8 +18,10 @@ pub fn init_routes(cfg: &mut ServiceConfig) {
             .service(chain::mine_block)
             .service(chain::get_difficulty)
             .service(chain::set_difficulty)
-            .service(tx::post_faucet) // NEW
-            .service(tx::post_transaction) // REDONE
-            .service(tx::get_mempool),
+            .service(tx::post_faucet)
+            .service(tx::post_transaction)
+            .service(tx::get_mempool)
+            .service(balance::get_balance)
+            .service(stats::get_stats), // <- aqui
     );
 }
