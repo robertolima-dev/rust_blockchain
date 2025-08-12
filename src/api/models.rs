@@ -38,11 +38,6 @@ pub struct ValidateResponse {
     pub difficulty: u32,
 }
 
-#[derive(Deserialize)]
-pub struct MineRequest {
-    pub data: String,
-}
-
 #[derive(Serialize)]
 pub struct MineResponse {
     pub mined_index: u64,
@@ -92,4 +87,29 @@ pub struct FaucetRequest {
 pub struct FaucetResponse {
     pub txid: String,
     pub outpoints: Vec<crate::transaction::OutPoint>,
+}
+
+#[derive(Deserialize)]
+pub struct MineRequest {
+    pub miner_address: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct BalanceResponse {
+    pub address: String,
+    pub balance: u128,
+    pub utxos: usize,
+}
+
+#[derive(serde::Serialize)]
+pub struct StatsResponse {
+    pub height: usize,
+    pub difficulty: u32,
+    pub target_block_time_secs: i64,
+    pub adjust_window: usize,
+    pub adjust_threshold_pct: f64,
+    pub last_interval_secs: Option<i64>,
+    pub avg_interval_secs: Option<f64>,
+    pub mempool_size: usize,
+    pub utxo_size: usize,
 }
