@@ -1,28 +1,34 @@
 # Rust Blockchain API 🚀
 
-Uma blockchain simplificada escrita em **Rust**, servida por uma **API REST com Actix Web**.  
+Uma blockchain simplificada escrita em **Rust**, servida por uma **API REST com Actix Web**.
 Atualmente com suporte a:
 
-- Faucet para criar UTXOs de teste
-- Transações com validação real de entradas (modelo UTXO)
-- Mempool para transações pendentes
-- Logging detalhado para debug
-- Estrutura de pastas organizada (`mod.rs` em cada módulo)
-- Endpoints padronizados em `/api/v1/.../` (com barra final)
+* Faucet para criar UTXOs de teste
+* Transações assinadas com **ECDSA secp256k1** (modelo UTXO)
+* Validação real de entradas com verificação de assinatura
+* Geração de carteiras (chave privada, chave pública e endereço)
+* Mempool para transações pendentes
+* Mineração com coinbase + mempool
+* Ajuste automático de dificuldade para alvo de \~60s/bloco
+* Endpoint de estatísticas da rede (`/stats/`)
+* Logging detalhado para debug
+* Estrutura de pastas organizada (`mod.rs` em cada módulo)
+* Endpoints padronizados em `/api/v1/.../` (com barra final)
 
 ---
 
 ## 📂 Estrutura de Pastas
 
 ```
-
 src/
 ├── api/
 │   ├── chain.rs        # Endpoints relacionados à blockchain (get, validate, mine, difficulty)
 │   ├── health.rs       # Health check
 │   ├── mod.rs          # Registro das rotas
 │   ├── models.rs       # Modelos de request/response + AppState
-│   └── tx.rs           # Faucet, transações e mempool
+│   ├── stats.rs        # Estatísticas da blockchain
+│   ├── tx.rs           # Faucet, transações e mempool
+│   └── wallet.rs       # Endpoints de geração de carteiras
 ├── blockchain/
 │   ├── block.rs        # Estrutura de bloco + PoW
 │   ├── mod.rs          # Módulo principal da blockchain
@@ -31,16 +37,17 @@ src/
 │   ├── model.rs        # Transaction, TxInput, TxOutput
 │   ├── utxo.rs         # UTXO set + OutPoint
 │   └── mod.rs          # Reexporta submódulos
+├── wallet/
+│   └── mod.rs          # Lógica de geração/validação de chaves e assinaturas
 └── main.rs             # Inicializa servidor e AppState
-
-````
+```
 
 ---
 
 ## ⚙️ Requisitos
 
-- Rust >= 1.70
-- `cargo` instalado
+* Rust >= 1.70
+* `cargo` instalado
 
 ---
 
@@ -53,11 +60,13 @@ cd <repo>
 
 # Instale dependências e rode
 cargo run
-````
+```
 
-# Ou
+Ou com script de hot reload:
+
+```bash
 ./start_server.sh
-````
+```
 
 Com logs de debug:
 
@@ -86,128 +95,117 @@ curl http://127.0.0.1:8080/api/v1/health/
 
 ---
 
-### **2. Faucet** (DEV)
+### **2. Criar Wallet**
 
-Cria um UTXO diretamente para testes.
-
-```
-POST /api/v1/faucet/
-```
-
-**Request:**
-
-```json
-{ "address": "alice", "amount": 100 }
-```
+`POST /api/v1/wallet/new/`
+Gera chave privada, chave pública e endereço.
 
 **Response:**
 
 ```json
 {
-  "txid": "6c1a0c8b7f2f4b8f9a3e6d1c...",
-  "outpoints": [{ "txid": "6c1a0c8b7f2f4b8f9a3e6d1c...", "vout": 0 }]
+  "private_key": "hex...",
+  "public_key": "hex...",
+  "address": "hex..."
 }
 ```
 
 ---
 
-### **3. Nova Transação**
+### **3. Faucet (DEV)**
 
-Cria uma transação usando UTXOs existentes.
+`POST /api/v1/faucet/`
+Cria um UTXO diretamente para testes.
 
+**Request:**
+
+```json
+{ "address": "hex_pubkey", "amount": 100 }
 ```
-POST /api/v1/tx/
+
+**Response:**
+
+```json
+{ "txid": "hash..." }
 ```
+
+---
+
+### **4. Nova Transação Assinada**
+
+`POST /api/v1/tx/`
 
 **Request:**
 
 ```json
 {
   "inputs": [
-    { "outpoint": { "txid": "6c1a0c8b7f2f4b8f9a3e6d1c...", "vout": 0 } }
+    {
+      "outpoint": { "txid": "hash...", "vout": 0 },
+      "pubkey": "hex_pubkey",
+      "signature": "hex_der_signature"
+    }
   ],
   "outputs": [
-    { "address": "bob", "amount": 60 },
-    { "address": "change-alice", "amount": 39 }
-  ]
-}
-```
-
-**Response:**
-
-```json
-{ "txid": "def123..." }
-```
-
-⚠️ Importante:
-
-* Use **txid** e **vout** retornados pelo faucet.
-* `vout` deve ser **número**, não string.
-* Barra final obrigatória: `/api/v1/tx/`
-
----
-
-### **4. Mempool**
-
-Lista transações pendentes de mineração.
-
-```
-GET /api/v1/mempool/
-```
-
-**Response:**
-
-```json
-{
-  "size": 1,
-  "transactions": [
-    "def123..."
+    { "address": "hex_pubkey_dest", "amount": 60 },
+    { "address": "hex_pubkey_troco", "amount": 39 }
   ]
 }
 ```
 
 ---
 
-## 🔍 Fluxo de Teste Completo
+### **5. Mempool**
 
-1. Criar UTXO com faucet:
+`GET /api/v1/mempool/`
+Lista transações pendentes.
 
-```bash
-curl -X POST http://127.0.0.1:8080/api/v1/faucet/ \
-  -H "Content-Type: application/json" \
-  -d '{ "address": "alice", "amount": 100 }'
+---
+
+### **6. Mine**
+
+`POST /api/v1/mine/`
+Mina um novo bloco, pagando coinbase + taxas ao minerador.
+
+**Request:**
+
+```json
+{ "miner_address": "hex_pubkey" }
 ```
 
-2. Criar transação usando UTXO retornado:
+---
 
-```bash
-curl -X POST http://127.0.0.1:8080/api/v1/tx/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "inputs": [
-      { "outpoint": { "txid": "TXID_DO_FAUCET", "vout": 0 } }
-    ],
-    "outputs": [
-      { "address": "bob", "amount": 60 },
-      { "address": "change-alice", "amount": 39 }
-    ]
-  }'
-```
+### **7. Balance**
 
-3. Verificar mempool:
+`GET /api/v1/balance/{address}/`
+Consulta saldo e número de UTXOs.
 
-```bash
-curl http://127.0.0.1:8080/api/v1/mempool/
-```
+---
+
+### **8. Stats**
+
+`GET /api/v1/stats/`
+Mostra altura, dificuldade, tempos de bloco, mempool e tamanho do UTXO.
+
+---
+
+## 🔍 Fluxo Completo de Teste
+
+1. Criar wallet (`/wallet/new/`)
+2. Faucet para endereço gerado
+3. Criar outra wallet (destinatário)
+4. Montar payload assinado e enviar no `/tx/`
+5. Minerar com `/mine/`
+6. Conferir saldos e stats
 
 ---
 
 ## 📌 Próximos Passos
 
-* Implementar mineração real (`/mine/`) a partir da mempool.
-* Aplicar blocos minerados ao UTXO set.
-* Ajuste automático de dificuldade.
-* Suporte para mineradores externos (template/submit).
+* Múltiplos mineradores externos
+* Propagação de blocos e transações entre nós
+* Persistência de dados em disco
+* Melhorias no formato de endereço
 
 ---
 
