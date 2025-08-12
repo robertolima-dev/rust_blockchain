@@ -3,7 +3,8 @@ mod chain;
 mod health;
 pub mod models;
 mod stats;
-mod tx; // <- add
+mod tx;
+mod wallet; // <- add
 
 use actix_web::web::{self, ServiceConfig};
 
@@ -22,6 +23,7 @@ pub fn init_routes(cfg: &mut ServiceConfig) {
             .service(tx::post_transaction)
             .service(tx::get_mempool)
             .service(balance::get_balance)
-            .service(stats::get_stats), // <- aqui
+            .service(stats::get_stats)
+            .service(wallet::create_wallet), // <- here
     );
 }

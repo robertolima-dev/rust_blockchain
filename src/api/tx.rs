@@ -1,3 +1,4 @@
+use crate::wallet::{pubkey_to_address_hex, verify_signature_hex};
 use actix_web::{HttpResponse, Responder, get, post, web};
 use log::{debug, info, warn};
 use std::collections::HashSet;
@@ -147,13 +148,12 @@ pub async fn get_mempool(state: web::Data<AppState>) -> impl Responder {
 
 /// UTXO-level validation (no signatures yet).
 fn validate_transaction(tx: &Transaction, utxo: &UtxoSet) -> Result<(), &'static str> {
-    // Disallow coinbase-like in /tx/ for agora (sem inputs não pode)
     if tx.inputs.is_empty() {
         return Err("transactions must have at least one input (use /faucet/ to create UTXOs)");
     }
 
     // No duplicate inputs
-    let mut seen = HashSet::<(&str, u32)>::new();
+    let mut seen = std::collections::HashSet::<(&str, u32)>::new();
     for input in &tx.inputs {
         let key = (input.outpoint.txid.as_str(), input.outpoint.vout);
         if !seen.insert(key) {
@@ -161,15 +161,37 @@ fn validate_transaction(tx: &Transaction, utxo: &UtxoSet) -> Result<(), &'static
         }
     }
 
-    // All inputs must exist in UTXO; sum inputs
+    // Sum inputs and check existence + ownership + signature
+    let sighash = tx.sighash();
     let mut input_sum: u128 = 0;
-    for input in &tx.inputs {
+
+    for (i, input) in tx.inputs.iter().enumerate() {
         let op = &input.outpoint;
-        let out = utxo.get(op).ok_or("referenced UTXO not found")?;
-        input_sum += out.amount as u128;
+
+        // Must exist
+        let prev_out = utxo.get(op).ok_or("referenced UTXO not found")?;
+
+        // Ownership: address derived from pubkey must match UTXO's address
+        let derived_addr = pubkey_to_address_hex(&input.pubkey)?;
+        if prev_out.address != derived_addr {
+            return Err("pubkey does not own referenced UTXO (address mismatch)");
+        }
+
+        // Signature presence
+        if input.signature.is_empty() {
+            return Err("missing signature in input");
+        }
+
+        // Verify signature
+        let ok = verify_signature_hex(&input.pubkey, &input.signature, sighash)?;
+        if !ok {
+            return Err("invalid signature");
+        }
+
+        input_sum += prev_out.amount as u128;
     }
 
-    // Output sum & fee check
+    // Economic: sum(inputs) >= sum(outputs)
     let output_sum: u128 = tx.outputs.iter().map(|o| o.amount as u128).sum();
     if input_sum < output_sum {
         return Err("inputs total is less than outputs total");
