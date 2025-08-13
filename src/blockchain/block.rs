@@ -84,6 +84,24 @@ impl Block {
             .take(difficulty as usize)
             .all(|c| c == '0')
     }
+
+    pub fn new_with_timestamp(
+        index: u64,
+        previous_hash: String,
+        transactions: Vec<crate::transaction::Transaction>,
+        timestamp: i64,
+    ) -> Self {
+        let mut block = Self {
+            index,
+            timestamp,
+            previous_hash,
+            nonce: 0,
+            hash: String::new(),
+            transactions,
+        };
+        block.hash = block.compute_hash();
+        block
+    }
 }
 
 #[cfg(test)]

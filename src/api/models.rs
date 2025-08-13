@@ -1,14 +1,25 @@
-use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
-
 use crate::blockchain::Blockchain;
 use crate::transaction::{Transaction, UtxoSet};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Mutex;
 
+#[derive(Clone)]
+pub struct MiningTemplate {
+    pub template_id: String,
+    pub index: u64,
+    pub previous_hash: String,
+    pub timestamp: i64,
+    pub difficulty: u32,
+    pub miner_address: String,
+    pub transactions: Vec<crate::transaction::Transaction>, // coinbase first
+}
 /// Shared application state with an in-memory blockchain, mempool and UTXO set.
 pub struct AppState {
     pub blockchain: Mutex<Blockchain>,
     pub mempool: Mutex<Vec<Transaction>>,
     pub utxo_set: Mutex<UtxoSet>,
+    pub mining_templates: Mutex<HashMap<String, MiningTemplate>>,
 }
 
 impl Default for AppState {
@@ -18,8 +29,41 @@ impl Default for AppState {
             blockchain: Mutex::new(Blockchain::new(DEFAULT_DIFFICULTY)),
             mempool: Mutex::new(Vec::new()),
             utxo_set: Mutex::new(UtxoSet::new()),
+            mining_templates: Mutex::new(HashMap::new()),
         }
     }
+}
+
+/* ---------- Mining API Models ---------- */
+
+#[derive(Deserialize)]
+pub struct TemplateRequest {
+    pub miner_address: String,
+}
+
+#[derive(Serialize)]
+pub struct TemplateResponse {
+    pub template_id: String,
+    pub index: u64,
+    pub previous_hash: String,
+    pub timestamp: i64,
+    pub difficulty: u32,
+    pub transactions: Vec<crate::transaction::Transaction>, // coinbase first
+}
+
+#[derive(Deserialize)]
+pub struct SubmitRequest {
+    pub template_id: String,
+    pub nonce: u64,
+    pub hash: String,
+}
+
+#[derive(Serialize)]
+pub struct SubmitResponse {
+    pub accepted: bool,
+    pub mined_index: Option<u64>,
+    pub hash: Option<String>,
+    pub difficulty: Option<u32>,
 }
 
 /* ---------- Chain API Models ---------- */
