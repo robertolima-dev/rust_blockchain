@@ -22,3 +22,9 @@ pub const DIFF_ADJUST_THRESHOLD_PCT: f64 = 0.20;
 /// Difficulty bounds (keep low in dev to avoid long waits)
 pub const DIFF_MIN: u32 = 1;
 pub const DIFF_MAX: u32 = 6;
+
+/// ---- Block assembly limits (DEV TUNING) ----
+/// Max number of transactions (exclui coinbase)
+pub const MAX_TXS_PER_BLOCK: usize = 200;
+/// Max block "size" em bytes (estimado via JSON da tx, didático)
+pub const MAX_BLOCK_BYTES: usize = 64 * 1024; // 64 KB
