@@ -139,4 +139,20 @@ impl Blockchain {
             );
         }
     }
+
+    /// Append a pre-mined block (nonce/hash already set) after validating linkage and PoW.
+    pub fn append_premined_block(&mut self, block: Block) -> Result<(), &'static str> {
+        // linkage
+        if block.previous_hash != self.last_block().hash {
+            return Err("stale template: previous_hash mismatch");
+        }
+        // PoW at current difficulty (simplificação didática)
+        if !block.is_valid(self.difficulty) {
+            return Err("invalid PoW for current difficulty");
+        }
+        self.chain.push(block);
+        // adjust difficulty for next blocks
+        self.maybe_adjust_difficulty();
+        Ok(())
+    }
 }
