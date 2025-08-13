@@ -1,3 +1,6 @@
+use crate::blockchain::{
+    BASE_REWARD, Blockchain, DEFAULT_DIFFICULTY, MAX_BLOCK_BYTES, MAX_TXS_PER_BLOCK,
+};
 use actix_web::{HttpResponse, Responder, get, post, web};
 use log::{debug, info, warn};
 use std::collections::HashSet;
@@ -6,7 +9,6 @@ use super::models::{
     AppState, ChainResponse, DifficultyResponse, MineRequest, MineResponse, SetDifficultyRequest,
     ValidateResponse,
 };
-use crate::blockchain::{BASE_REWARD, Blockchain, DEFAULT_DIFFICULTY};
 use crate::transaction::{OutPoint, Transaction, TxInput, TxOutput, UtxoSet};
 
 /// Get the full blockchain.
@@ -190,53 +192,109 @@ pub async fn set_difficulty(
 
 /* -------------------- Helpers -------------------- */
 
-/// Select transactions from mempool that are valid against current UTXO.
-/// Prevents double-spends inside the same block. Returns (selected_txs, total_fees).
+/// Seleciona transações da mempool priorizando fee rate (sat/byte),
+/// respeitando limites de bytes e contagem, e evitando double-spend
+/// dentro do mesmo bloco. Retorna (txs_selecionadas, total_fees).
 fn select_transactions(mempool: &[Transaction], utxo: &UtxoSet) -> (Vec<Transaction>, u128) {
-    let mut selected = Vec::new();
-    let mut consumed = HashSet::<(String, u32)>::new(); // outpoints used in this block
-    let mut total_fees: u128 = 0;
+    // 1) Pré-calcular fee e tamanho de cada tx; descartar inválidas de cara
+    #[derive(Clone)]
+    struct Cand {
+        idx: usize,
+        fee: u128,
+        size: usize,
+        fee_rate: f64,
+    }
 
-    'outer: for tx in mempool {
+    let mut cands: Vec<Cand> = Vec::new();
+    for (idx, tx) in mempool.iter().enumerate() {
         if tx.inputs.is_empty() {
-            // We don't accept coinbase-like from mempool
+            // não aceitamos coinbase-like na mempool
             continue;
         }
 
-        // Ensure inputs exist and are not already consumed in this block
+        // soma de inputs a partir do UTXO; se algum não existir, descarta
         let mut input_sum: u128 = 0;
+        let mut ok = true;
         for input in &tx.inputs {
-            let op = &input.outpoint;
-            let key = (op.txid.clone(), op.vout);
-            if consumed.contains(&key) {
-                // would double-spend inside this block
-                continue 'outer;
-            }
-            match utxo.get(op) {
-                Some(out) => {
-                    input_sum += out.amount as u128;
-                }
+            match utxo.get(&input.outpoint) {
+                Some(prev) => input_sum += prev.amount as u128,
                 None => {
-                    // missing UTXO -> skip this tx
-                    continue 'outer;
+                    ok = false;
+                    break;
                 }
             }
+        }
+        if !ok {
+            continue;
         }
 
         let output_sum = tx.total_output_amount();
         if input_sum < output_sum {
-            // invalid economics -> skip
+            continue; // economics inválida
+        }
+        let fee = input_sum - output_sum;
+        let size = tx.vsize_bytes();
+        let fee_rate = if size > 0 {
+            fee as f64 / size as f64
+        } else {
+            0.0
+        };
+
+        cands.push(Cand {
+            idx,
+            fee,
+            size,
+            fee_rate,
+        });
+    }
+
+    // 2) Ordenar por fee_rate desc; tie-break por fee desc, depois txid asc
+    cands.sort_by(|a, b| {
+        b.fee_rate
+            .partial_cmp(&a.fee_rate)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.fee.cmp(&a.fee))
+            .then_with(|| mempool[a.idx].txid.cmp(&mempool[b.idx].txid))
+    });
+
+    // 3) Greedy packing respeitando limites + prevenindo double-spend
+    let mut total_fees: u128 = 0;
+    let mut total_bytes: usize = 0;
+    let mut picked: Vec<Transaction> = Vec::new();
+    let mut consumed = std::collections::HashSet::<(String, u32)>::new();
+
+    for c in cands {
+        if picked.len() >= MAX_TXS_PER_BLOCK {
+            break;
+        }
+        if total_bytes + c.size > MAX_BLOCK_BYTES {
             continue;
         }
 
-        // Accept this tx: mark inputs consumed and add fee
+        let tx = &mempool[c.idx];
+
+        // checar double-spend contra `consumed`
+        let mut ok = true;
         for input in &tx.inputs {
-            let op = &input.outpoint;
-            consumed.insert((op.txid.clone(), op.vout));
+            let key = (input.outpoint.txid.clone(), input.outpoint.vout);
+            if consumed.contains(&key) {
+                ok = false;
+                break;
+            }
         }
-        total_fees += input_sum - output_sum;
-        selected.push(tx.clone());
+        if !ok {
+            continue;
+        }
+
+        // passa: adiciona, marca inputs como consumidos
+        for input in &tx.inputs {
+            consumed.insert((input.outpoint.txid.clone(), input.outpoint.vout));
+        }
+
+        total_fees += c.fee;
+        total_bytes += c.size;
+        picked.push(tx.clone());
     }
 
-    (selected, total_fees)
+    (picked, total_fees)
 }

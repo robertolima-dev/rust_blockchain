@@ -99,4 +99,9 @@ impl Transaction {
         out.copy_from_slice(&digest[..]);
         out
     }
+
+    pub fn vsize_bytes(&self) -> usize {
+        // inclui pubkeys/assinaturas (como no wire real)
+        serde_json::to_vec(self).map(|v| v.len()).unwrap_or(0)
+    }
 }
