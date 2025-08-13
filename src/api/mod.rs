@@ -1,10 +1,11 @@
 mod balance;
 mod chain;
 mod health;
+mod mining;
 pub mod models;
 mod stats;
 mod tx;
-mod wallet; // <- add
+mod wallet; // <- NEW
 
 use actix_web::web::{self, ServiceConfig};
 
@@ -24,6 +25,8 @@ pub fn init_routes(cfg: &mut ServiceConfig) {
             .service(tx::get_mempool)
             .service(balance::get_balance)
             .service(stats::get_stats)
-            .service(wallet::create_wallet), // <- here
+            .service(wallet::create_wallet)
+            .service(mining::get_template) // <- add
+            .service(mining::submit_solution), // <- add
     );
 }
